@@ -125,7 +125,24 @@ namespace Microsoft.AspNetCore.Cors.Infrastructure
 
         private async Task InvokeCore(HttpContext context, ICorsPolicyProvider corsPolicyProvider)
         {
-            var corsPolicy = _policy ?? await corsPolicyProvider.GetPolicyAsync(context, ResolveCorsPolicyName(context));
+            var endpoint = context.GetEndpoint();
+
+            // Get the most significant CORS metadata for the endpoint
+            // For backwards compatibility reasons this is then downcast to Enable/Disable metadata
+            var corsMetadata = endpoint?.Metadata.GetMetadata<ICorsAttribute>();
+            if (corsMetadata is IDisableCorsAttribute)
+            {
+                await _next(context);
+                return;
+            }
+
+            string policyName = _corsPolicyName;
+            if (corsMetadata is IEnableCorsAttribute enableCorsAttribute)
+            {
+                policyName = enableCorsAttribute.PolicyName;
+            }
+
+            var corsPolicy = _policy ?? await corsPolicyProvider.GetPolicyAsync(context, policyName);
             if (corsPolicy == null)
             {
                 Logger?.NoCorsPolicyFound();
@@ -148,12 +165,6 @@ namespace Microsoft.AspNetCore.Cors.Infrastructure
                 context.Response.OnStarting(OnResponseStartingDelegate, Tuple.Create(this, context, corsResult));
                 await _next(context);
             }
-        }
-
-        internal string ResolveCorsPolicyName(HttpContext context)
-        {
-            var endpoint = context.GetEndpoint();
-            return endpoint?.Metadata.GetMetadata<IEnableCorsAttribute>()?.PolicyName ?? _corsPolicyName;
         }
 
         private static Task OnResponseStarting(object state)

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System.Net;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -57,15 +58,13 @@ namespace SampleDestination
 
         public void Configure(IApplicationBuilder app, IHostingEnvironment env)
         {
-            var sampleMiddleware = new SampleMiddleware(context => Task.CompletedTask);
-
             app.UseEndpointRouting(routing =>
             {
-                routing.Map("/allow-origin", sampleMiddleware.Invoke).RequireCors("AllowOrigin");
-                routing.Map("/allow-header-method", sampleMiddleware.Invoke).RequireCors("AllowHeaderMethod");
-                routing.Map("/allow-credentials", sampleMiddleware.Invoke).RequireCors("AllowCredentials");
-                routing.Map("/exposed-header", sampleMiddleware.Invoke).RequireCors("ExposedHeader");
-                routing.Map("/allow-all", sampleMiddleware.Invoke).RequireCors("AllowAll");
+                routing.Map("/allow-origin", HandleRequest).WithCorsPolicy("AllowOrigin");
+                routing.Map("/allow-header-method", HandleRequest).WithCorsPolicy("AllowHeaderMethod");
+                routing.Map("/allow-credentials", HandleRequest).WithCorsPolicy("AllowCredentials");
+                routing.Map("/exposed-header", HandleRequest).WithCorsPolicy("ExposedHeader");
+                routing.Map("/allow-all", HandleRequest).WithCorsPolicy("AllowAll");
             });
 
             app.UseCors();
@@ -76,6 +75,20 @@ namespace SampleDestination
             {
                 await context.Response.WriteAsync("Hello World!");
             });
+        }
+
+        private Task HandleRequest(HttpContext context)
+        {
+            var content = Encoding.UTF8.GetBytes("Hello world");
+
+            context.Response.Headers["X-AllowedHeader"] = "Test-Value";
+            context.Response.Headers["X-DisallowedHeader"] = "Test-Value";
+
+            context.Response.ContentType = "text/plain; charset=utf-8";
+            context.Response.ContentLength = content.Length;
+            context.Response.Body.Write(content, 0, content.Length);
+
+            return Task.CompletedTask;
         }
     }
 }
